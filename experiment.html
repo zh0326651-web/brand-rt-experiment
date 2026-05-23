@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>品牌视觉感知实验</title>
+<script src="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/jspsych@7.3.4/dist/jspsych.css" rel="stylesheet">
+</head>
+<body>
+<script>
+// ============================================================
+// CONFIGURATION — modify these before deploying
+// ============================================================
+const IMAGES_BWC = [
+  'images/Hermes_BWC.png',
+  'images/Chanel_BWC.png',
+  'images/Dior_BWC.png',
+  'images/Lv_BWC.png',
+  'images/Gucci_BWC.png',
+  'images/Prada_BWC.png'
+];
+const IMAGES_CC = [
+  'images/Hermes_CC.png',
+  'images/Chanel_CC.png',
+  'images/Dior_CC.png',
+  'images/Lv_CC.png',
+  'images/Gucci_CC.png',
+  'images/Prada_CC.png'
+];
+const BRAND_NAMES = ['Hermes', 'Chanel', 'Dior', 'Louis Vuitton', 'Gucci', 'Prada'];
+
+
+// ============================================================
+// RANDOM ASSIGN TO CONDITION
+// ============================================================
+const condition = Math.random() < 0.5 ? 'BWC' : 'CC';
+const images = condition === 'BWC' ? IMAGES_BWC : IMAGES_CC;
+const subjectId = 'RT' + Date.now().toString(36).toUpperCase();
+
+// ============================================================
+// INIT JSPSYCH
+// ============================================================
+const jsPsych = initJsPsych({
+  on_finish: function() {
+    const csv = jsPsych.data.get().csv();
+    const blob = new Blob(['﻿' + csv], {type: 'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = subjectId + '_data.csv';
+    a.click();
+  }
+});
+
+// ============================================================
+// UTILITY: detect if mobile (mobile RT not reliable)
+// ============================================================
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent);
+}
+
+// ============================================================
+// TRIALS
+// ============================================================
+
+// --- Welcome/consent ---
+const welcome = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="max-width:700px;margin:0 auto;text-align:left;line-height:1.8;">
+      <h2>品牌视觉感知实验</h2>
+      <p>欢迎您参与本次学术研究。</p>
+      <p><b>任务说明：</b>您将依次看到一系列品牌图像。请<u>尽快且准确</u>地判断：</p>
+      <p style="font-size:1.3em;text-align:center;"><b>该图像是否来自奢侈品牌？</b></p>
+      <p style="text-align:center;">按 <b style="color:green;font-size:1.2em;">F</b> 键 = 是奢侈品牌</p>
+      <p style="text-align:center;">按 <b style="color:red;font-size:1.2em;">J</b> 键 = 不是奢侈品牌</p>
+      <p>实验共有6个试次，请保持注意力集中。</p>
+      <p style="color:#999;font-size:0.85em;">请使用电脑浏览器完成本实验，手机无法记录精确反应时。</p>
+    </div>
+  `,
+  choices: ['开始实验']
+};
+
+// --- Device check ---
+const deviceCheck = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: function() {
+    if (isMobile()) {
+      return `
+        <div style="max-width:600px;margin:0 auto;">
+          <h3 style="color:red;">请使用电脑浏览器</h3>
+          <p>本实验需要精确的按键反应时记录，手机或平板无法保证测量精度。</p>
+          <p>请在电脑上打开此链接（Chrome/Edge/Firefox均可）。</p>
+        </div>
+      `;
+    }
+    return '';
+  },
+  choices: function() {
+    return isMobile() ? [] : ['继续'];
+  },
+  conditional_function: function() {
+    return isMobile();
+  }
+};
+
+// --- Instructions page 2 ---
+const instructions2 = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: `
+    <div style="max-width:700px;margin:0 auto;text-align:left;line-height:1.8;">
+      <h3>操作提示</h3>
+      <ul>
+        <li>图像出现后请<b>尽快</b>做出判断</li>
+        <li>将左手食指放在 <b style="color:green;">F 键</b>，右手食指放在 <b style="color:red;">J 键</b></li>
+      </ul>
+    </div>
+  `,
+  choices: ['准备好了']
+};
+
+// --- Fixation cross ---
+const fixation = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: '<div style="font-size:48px;">+</div>',
+  choices: "NO_KEYS",
+  trial_duration: 500,
+  data: { task: 'fixation' }
+};
+
+// --- Image judgment trial (generic, filled in timeline) ---
+const judgmentTrial = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: function() {
+    const img = jsPsych.evaluateTimelineVariable('image');
+    return `<img src="${img}" style="max-width:80%;max-height:70vh;object-fit:contain;">`;
+  },
+  choices: ['f', 'j'],
+  trial_duration: 5000,
+  data: function() {
+    return {
+      task: 'judgment',
+      image: jsPsych.evaluateTimelineVariable('image'),
+      brand: jsPsych.evaluateTimelineVariable('brand'),
+      expected: 'f',  // all experimental images are luxury brands → correct = F
+      condition: condition === 'BWC' ? 1 : 0,
+      subject_id: subjectId
+    };
+  },
+  on_finish: function(data) {
+    data.rt_ms = data.rt;  // match R script expected column name
+    data.correct = (data.response === 'f') ? 1 : 0;
+    if (data.response === null) {
+      data.rt_ms = 5000;
+      data.timeout = 1;
+    } else {
+      data.timeout = 0;
+    }
+  }
+};
+
+// --- ITI (blank screen) ---
+const iti = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: '',
+  choices: "NO_KEYS",
+  trial_duration: function() { return Math.floor(Math.random() * 401) + 400; },
+  data: { task: 'iti' }
+};
+
+// --- Completion ---
+const completion = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: function() {
+    return `
+      <div style="max-width:700px;margin:0 auto;line-height:1.8;">
+        <h3>实验完成！</h3>
+        <p>感谢您的参与。</p>
+        <p>您的完成码：<b style="font-size:1.5em;background:#f0f0f0;padding:4px 12px;">${subjectId}</b></p>
+        <p style="color:#999;">请将此码填入问卷星中的"实验完成码"一栏。</p>
+        <p style="margin-top:20px;color:#999;font-size:0.8em;">您的反应时数据已自动保存。</p>
+      </div>
+    `;
+  },
+  choices: ['关闭页面']
+};
+
+// ============================================================
+// BUILD TIMELINE
+// ============================================================
+
+// --- Main trials ---
+const mainTrialList = images.map((img, i) => ({
+  image: img,
+  brand: BRAND_NAMES[i]
+}));
+
+const mainTimeline = {
+  timeline: [fixation, judgmentTrial, iti],
+  timeline_variables: mainTrialList,
+  sample: { type: 'fixed-repetitions', size: 1 },
+  randomize_order: true
+};
+
+// ============================================================
+// FINAL TIMELINE
+// ============================================================
+const fullTimeline = [
+  welcome,
+  instructions2,
+  {
+    type: jsPsychHtmlButtonResponse,
+    stimulus: '<div style="max-width:700px;margin:0 auto;"><h3>准备开始</h3><p>接下来进入正式实验。</p><p>记住：<b style="color:green;">F = 奢侈品牌</b>，<b style="color:red;">J = 非奢侈品牌</b></p></div>',
+    choices: ['开始正式实验']
+  },
+  mainTimeline,
+  completion
+];
+
+jsPsych.run(fullTimeline);
+</script>
+</body>
+</html>
